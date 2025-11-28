@@ -1,0 +1,1966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Executive function support dashboard for ASD/ADHD">
+  <meta name="theme-color" content="#2C2C2C">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Tiempo">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='100' fill='%232C2C2C'/%3E%3Ctext x='50%25' y='58%25' dominant-baseline='middle' text-anchor='middle' font-size='220' font-family='Georgia, serif' fill='%23F5F5F5' font-weight='300'%3Et%3C/text%3E%3C/svg%3E">
+  <title>Tiempo</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body { 
+      margin: 0; 
+      padding: 0; 
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+      font-weight: 400;
+      letter-spacing: -0.01em;
+    }
+    * { box-sizing: border-box; }
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.3); 
+      backdrop-filter: blur(10px);
+      display: flex; align-items: center;
+      justify-content: center; z-index: 1000; padding: 20px;
+    }
+    .modal-content {
+      background: #FFFFFF; 
+      border-radius: 12px; 
+      padding: 32px;
+      max-width: 500px; width: 100%; max-height: 80vh; overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.12);
+    }
+    input, textarea, select {
+      font-family: inherit;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // Register service worker for offline support
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('data:text/javascript;base64,' + btoa(`
+          const CACHE_NAME = 'audhd-dashboard-v1';
+          const urlsToCache = ['./', './Tiempo-Dashboard-Complete.html'];
+          
+          self.addEventListener('install', event => {
+            event.waitUntil(
+              caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache))
+            );
+          });
+          
+          self.addEventListener('fetch', event => {
+            event.respondWith(
+              caches.match(event.request).then(response => response || fetch(event.request))
+            );
+          });
+        `)).catch(err => console.log('SW registration failed:', err));
+      });
+    }
+
+    // Icons
+    const Sparkles = ({ size = 24, color = "currentColor" }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>
+        <path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/>
+      </svg>
+    );
+    const Target = ({ size = 24, color = "currentColor" }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
+      </svg>
+    );
+    const Calendar = ({ size = 24, color = "currentColor" }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+      </svg>
+    );
+    const Heart = ({ size = 24, color = "currentColor" }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+      </svg>
+    );
+    const Zap = ({ size = 24, color = "currentColor" }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+      </svg>
+    );
+    const Leaf = ({ size = 24, color = "currentColor" }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/>
+        <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>
+      </svg>
+    );
+    const Plus = ({ size = 24, color = "currentColor" }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+    );
+    const X = ({ size = 24, color = "currentColor" }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    );
+
+    const colors = {
+      bg: '#FAFAFA', card: '#FFFFFF', primary: '#2C2C2C', secondary: '#4A4A4A',
+      accent: '#6B6B6B', text: '#2C2C2C', textLight: '#8B8B8B',
+      energy: { high: '#2C2C2C', mid: '#6B6B6B', low: '#B8B8B8' },
+      cycle: { menstrual: '#C9ADA7', follicular: '#A8DADC', ovulation: '#E8E8E8', luteal: '#D4A5A5' }
+    };
+
+    function TiempoDashboard() {
+      const [currentView, setCurrentView] = useState('home');
+      const [showModal, setShowModal] = useState(false);
+      const [modalType, setModalType] = useState('');
+      
+      const loadData = (key, defaultValue) => {
+        try {
+          const saved = localStorage.getItem(key);
+          return saved ? JSON.parse(saved) : defaultValue;
+        } catch {
+          return defaultValue;
+        }
+      };
+
+      const [dailyData, setDailyData] = useState(() => loadData('dailyData', {
+        date: new Date().toISOString().split('T')[0],
+        energy: null, sleep: null, sensory: null, emotions: null,
+        caffeine: 0, veggies: 0,
+        medication: { taken: false, time: '', dose: '', notes: '' },
+        cycleDay: 1, cyclePhase: 'follicular'
+      }));
+
+      const [cycleHistory, setCycleHistory] = useState(() => loadData('cycleHistory', []));
+      const [objectives, setObjectives] = useState(() => loadData('objectives', [
+        { id: 1, name: 'Calm Living Space', why: 'Peace and reduced sensory overwhelm', color: colors.accent }
+      ]));
+      const [todos, setTodos] = useState(() => loadData('todos', [
+        { 
+          id: 1, text: 'Clean floor', objectiveId: 1, energy: 'high', timeMinutes: 30,
+          prepSteps: ['Gather vacuum', 'Clear floor space', 'Put on comfortable clothes'],
+          completed: false, actualEnergy: null, actualTime: null
+        }
+      ]));
+      const [routines, setRoutines] = useState(() => loadData('routines', [
+        { id: 1, name: 'Morning Flow', energyLevel: 'mid',
+          steps: ['Brush teeth', 'Take meds', 'Drink water', 'Quick stretch'], completed: false }
+      ]));
+      const [appointments, setAppointments] = useState(() => loadData('appointments', []));
+      const [lists, setLists] = useState(() => loadData('lists', [
+        { id: 1, name: 'Current Obsessions', type: 'obsessions', notes: '', items: [
+          { text: 'Lo-fi beats', type: 'text' },
+          { text: 'Matcha lattes', type: 'text' },
+          { text: 'Soft blankets', type: 'text' }
+        ]}
+      ]));
+
+      // State for list view filtering
+      const [listViewMode, setListViewMode] = useState('all'); // 'all' or 'month'
+      const [selectedMonth, setSelectedMonth] = useState(() => {
+        const today = new Date();
+        return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+      });
+
+      // Refs for uncontrolled form inputs
+      const taskFormRef = useRef(null);
+      const routineFormRef = useRef(null);
+      const appointmentFormRef = useRef(null);
+      const objectiveFormRef = useRef(null);
+      const listFormRef = useRef(null);
+      const cycleFormRef = useRef(null);
+
+      const getCyclePhase = (day) => {
+        if (day >= 1 && day <= 5) return 'menstrual';
+        if (day >= 6 && day <= 13) return 'follicular';
+        if (day >= 14 && day <= 16) return 'ovulation';
+        if (day >= 17 && day <= 28) return 'luteal';
+        return 'follicular';
+      };
+
+      useEffect(() => { localStorage.setItem('dailyData', JSON.stringify(dailyData)); }, [dailyData]);
+      useEffect(() => { localStorage.setItem('cycleHistory', JSON.stringify(cycleHistory)); }, [cycleHistory]);
+      useEffect(() => { localStorage.setItem('objectives', JSON.stringify(objectives)); }, [objectives]);
+      useEffect(() => { localStorage.setItem('todos', JSON.stringify(todos)); }, [todos]);
+      useEffect(() => { localStorage.setItem('routines', JSON.stringify(routines)); }, [routines]);
+      useEffect(() => { localStorage.setItem('appointments', JSON.stringify(appointments)); }, [appointments]);
+      useEffect(() => { localStorage.setItem('lists', JSON.stringify(lists)); }, [lists]);
+
+      const handleAddTask = (e) => {
+        e.preventDefault();
+        const form = taskFormRef.current;
+        const formData = new FormData(form);
+        
+        const prepSteps = [];
+        let i = 0;
+        while (formData.get(`prepStep${i}`)) {
+          const step = formData.get(`prepStep${i}`).trim();
+          if (step) prepSteps.push(step);
+          i++;
+        }
+
+        const task = {
+          id: Date.now(),
+          text: formData.get('taskText'),
+          objectiveId: parseInt(formData.get('objectiveId')),
+          energy: formData.get('energy'),
+          timeMinutes: parseInt(formData.get('timeMinutes')) || 30,
+          prepSteps: prepSteps,
+          completed: false,
+          actualEnergy: null,
+          actualTime: null
+        };
+        
+        setTodos([...todos, task]);
+        setShowModal(false);
+        form.reset();
+      };
+
+      const handleAddRoutine = (e) => {
+        e.preventDefault();
+        const form = routineFormRef.current;
+        const formData = new FormData(form);
+        
+        const steps = [];
+        let i = 0;
+        while (formData.get(`step${i}`)) {
+          const step = formData.get(`step${i}`).trim();
+          if (step) steps.push(step);
+          i++;
+        }
+
+        const routine = {
+          id: Date.now(),
+          name: formData.get('routineName'),
+          energyLevel: formData.get('energyLevel'),
+          steps: steps,
+          completed: false
+        };
+        
+        setRoutines([...routines, routine]);
+        setShowModal(false);
+        form.reset();
+      };
+
+      const handleAddAppointment = (e) => {
+        e.preventDefault();
+        const form = appointmentFormRef.current;
+        const formData = new FormData(form);
+
+        const apt = {
+          id: Date.now(),
+          title: formData.get('title'),
+          date: formData.get('date'),
+          time: formData.get('time'),
+          flexibility: formData.get('flexibility'),
+          transitionBefore: parseInt(formData.get('transitionBefore')) || 15,
+          transitionAfter: parseInt(formData.get('transitionAfter')) || 30
+        };
+        
+        setAppointments([...appointments, apt]);
+        setShowModal(false);
+        form.reset();
+      };
+
+      const handleAddObjective = (e) => {
+        e.preventDefault();
+        const form = objectiveFormRef.current;
+        const formData = new FormData(form);
+
+        const obj = {
+          id: Date.now(),
+          name: formData.get('name'),
+          why: formData.get('why'),
+          color: formData.get('color') || colors.accent
+        };
+        
+        setObjectives([...objectives, obj]);
+        setShowModal(false);
+        form.reset();
+      };
+
+      const handleAddList = (e) => {
+        e.preventDefault();
+        const form = listFormRef.current;
+        const formData = new FormData(form);
+        
+        const items = [];
+        let i = 0;
+        while (formData.get(`itemType${i}`) !== null) {
+          const type = formData.get(`itemType${i}`);
+          const text = formData.get(`item${i}`)?.trim();
+          const url = formData.get(`itemUrl${i}`)?.trim();
+          
+          if (type === 'text' && text) {
+            items.push({ type: 'text', text });
+          } else if (type === 'link' && text && url) {
+            items.push({ type: 'link', text, url });
+          } else if (type === 'image' && url) {
+            items.push({ type: 'image', text: text || '', url });
+          }
+          i++;
+        }
+
+        const list = {
+          id: Date.now(),
+          name: formData.get('listName'),
+          notes: formData.get('listNotes') || '',
+          type: 'custom',
+          items: items,
+          createdDate: new Date().toISOString().split('T')[0]
+        };
+        
+        setLists([...lists, list]);
+        setShowModal(false);
+        form.reset();
+      };
+
+      const handleCycleUpdate = (e) => {
+        e.preventDefault();
+        const form = cycleFormRef.current;
+        const formData = new FormData(form);
+
+        const day = parseInt(formData.get('day')) || 1;
+        const phase = formData.get('phase') || getCyclePhase(day);
+        
+        const newEntry = {
+          date: new Date().toISOString().split('T')[0],
+          day: day,
+          phase: phase,
+          energy: formData.get('energy') ? parseInt(formData.get('energy')) : null,
+          sensory: formData.get('sensory') ? parseInt(formData.get('sensory')) : null,
+          sexualActivity: formData.get('sexualActivity') === 'on'
+        };
+        
+        setCycleHistory([...cycleHistory, newEntry]);
+        setDailyData(prev => ({ ...prev, cycleDay: day, cyclePhase: phase }));
+        setShowModal(false);
+        form.reset();
+      };
+
+      const handleDeleteTask = (id) => {
+        if (window.confirm('Delete this task?')) {
+          setTodos(todos.filter(t => t.id !== id));
+        }
+      };
+
+      const handleDeleteRoutine = (id) => {
+        if (window.confirm('Delete this routine?')) {
+          setRoutines(routines.filter(r => r.id !== id));
+        }
+      };
+
+      const handleDeleteAppointment = (id) => {
+        if (window.confirm('Delete this appointment?')) {
+          setAppointments(appointments.filter(a => a.id !== id));
+        }
+      };
+
+      const handleDeleteObjective = (id) => {
+        if (window.confirm('Delete this objective?')) {
+          setObjectives(objectives.filter(o => o.id !== id));
+        }
+      };
+
+      const handleDeleteList = (id) => {
+        if (window.confirm('Delete this list?')) {
+          setLists(lists.filter(l => l.id !== id));
+        }
+      };
+
+      const RatingSlider = ({ label, value, onChange, emoji }) => (
+        <div style={{ marginBottom: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px', gap: '8px' }}>
+            <span style={{ fontSize: '20px' }}>{emoji}</span>
+            <span style={{ color: colors.text, fontSize: '15px', fontWeight: '500' }}>{label}</span>
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {[1, 2, 3, 4, 5].map(num => (
+              <button key={num} onClick={() => onChange(num)} type="button"
+                style={{
+                  flex: 1, height: '40px', borderRadius: '12px', border: 'none',
+                  background: value === num ? colors.primary : colors.card,
+                  boxShadow: value === num ? '0 4px 12px rgba(232, 168, 124, 0.3)' : '0 2px 8px rgba(0,0,0,0.06)',
+                  cursor: 'pointer', fontSize: '14px',
+                  fontWeight: value === num ? '600' : '500',
+                  color: value === num ? '#FFF' : colors.textLight,
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                {num}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+
+      // MODAL COMPONENTS WITH SAVE BUTTONS
+      const AddTaskModal = () => {
+        const [prepStepCount, setPrepStepCount] = useState(1);
+
+        return (
+          <div className="modal-overlay" onClick={() => setShowModal(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <form ref={taskFormRef} onSubmit={handleAddTask}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <h2 style={{ fontSize: '20px', fontWeight: '600', color: colors.text, margin: 0 }}>Add New Task</h2>
+                  <button type="button" onClick={() => setShowModal(false)} style={{ border: 'none', background: 'none', cursor: 'pointer' }}>
+                    <X size={24} color={colors.textLight} />
+                  </button>
+                </div>
+                
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ fontSize: '14px', color: colors.text, display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                    What's the task?
+                  </label>
+                  <input
+                    type="text"
+                    name="taskText"
+                    placeholder="e.g., Clean the kitchen"
+                    required
+                    style={{
+                      width: '100%', padding: '12px', borderRadius: '10px',
+                      border: `1px solid ${colors.bg}`, fontSize: '15px'
+                    }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ fontSize: '14px', color: colors.text, display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                    Which objective?
+                  </label>
+                  <select name="objectiveId" defaultValue={objectives[0]?.id}
+                    style={{
+                      width: '100%', padding: '12px', borderRadius: '10px',
+                      border: `1px solid ${colors.bg}`, fontSize: '15px'
+                    }}
+                  >
+                    {objectives.map(obj => (
+                      <option key={obj.id} value={obj.id}>{obj.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: '14px', color: colors.text, display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                      Energy level
+                    </label>
+                    <select name="energy" defaultValue="mid"
+                      style={{
+                        width: '100%', padding: '12px', borderRadius: '10px',
+                        border: `1px solid ${colors.bg}`, fontSize: '15px'
+                      }}
+                    >
+                      <option value="low">Low</option>
+                      <option value="mid">Mid</option>
+                      <option value="high">High</option>
+                    </select>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: '14px', color: colors.text, display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                      Time (min)
+                    </label>
+                    <input type="number" name="timeMinutes" defaultValue="30"
+                      style={{
+                        width: '100%', padding: '12px', borderRadius: '10px',
+                        border: `1px solid ${colors.bg}`, fontSize: '15px'
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ fontSize: '14px', color: colors.text, display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                    Prep steps
+                  </label>
+                  <div data-prep-steps>
+                    {[...Array(prepStepCount)].map((_, idx) => (
+                      <div key={idx} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                        <input
+                          name={`prepStep${idx}`}
+                          placeholder={`Step ${idx + 1}`}
+                          style={{
+                            flex: 1, padding: '10px', borderRadius: '10px',
+                            border: `1px solid ${colors.bg}`, fontSize: '14px'
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <button type="button"
+                    onClick={() => setPrepStepCount(prepStepCount + 1)}
+                    style={{
+                      padding: '10px 16px', borderRadius: '10px', border: 'none',
+                      background: colors.bg, color: colors.text, cursor: 'pointer',
+                      fontSize: '14px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px'
+                    }}
+                  >
+                    <Plus size={16} /> Add step
+                  </button>
+                </div>
+
+                <button type="submit"
+                  style={{
+                    width: '100%', padding: '14px', borderRadius: '12px', border: 'none',
+                    background: colors.accent, color: '#FFF',
+                    fontSize: '16px', fontWeight: '600', cursor: 'pointer'
+                  }}
+                >
+                  Save Task
+                </button>
+              </form>
+            </div>
+          </div>
+        );
+      };
+
+      const AddRoutineModal = () => {
+        const [stepCount, setStepCount] = useState(4);
+
+        return (
+          <div className="modal-overlay" onClick={() => setShowModal(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <form ref={routineFormRef} onSubmit={handleAddRoutine}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <h2 style={{ fontSize: '20px', fontWeight: '600', color: colors.text, margin: 0 }}>Create Routine</h2>
+                  <button type="button" onClick={() => setShowModal(false)} style={{ border: 'none', background: 'none', cursor: 'pointer' }}>
+                    <X size={24} color={colors.textLight} />
+                  </button>
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ fontSize: '14px', color: colors.text, display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                    Routine name
+                  </label>
+                  <input type="text" name="routineName" placeholder="e.g., Evening Wind Down" required
+                    style={{
+                      width: '100%', padding: '12px', borderRadius: '10px',
+                      border: `1px solid ${colors.bg}`, fontSize: '15px'
+                    }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ fontSize: '14px', color: colors.text, display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                    Energy level required
+                  </label>
+                  <select name="energyLevel" defaultValue="mid"
+                    style={{
+                      width: '100%', padding: '12px', borderRadius: '10px',
+                      border: `1px solid ${colors.bg}`, fontSize: '15px'
+                    }}
+                  >
+                    <option value="low">Low Energy</option>
+                    <option value="mid">Mid Energy</option>
+                    <option value="high">High Energy</option>
+                  </select>
+                </div>
+
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ fontSize: '14px', color: colors.text, display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                    Steps
+                  </label>
+                  {[...Array(stepCount)].map((_, idx) => (
+                    <div key={idx} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                      <div style={{
+                        width: '28px', height: '38px', display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', fontSize: '14px', fontWeight: '600',
+                        color: colors.textLight
+                      }}>
+                        {idx + 1}
+                      </div>
+                      <input name={`step${idx}`} placeholder={`Step ${idx + 1}`}
+                        style={{
+                          flex: 1, padding: '10px', borderRadius: '10px',
+                          border: `1px solid ${colors.bg}`, fontSize: '14px'
+                        }}
+                      />
+                    </div>
+                  ))}
+                  <button type="button"
+                    onClick={() => setStepCount(stepCount + 1)}
+                    style={{
+                      padding: '10px 16px', borderRadius: '10px', border: 'none',
+                      background: colors.bg, color: colors.text, cursor: 'pointer',
+                      fontSize: '14px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px'
+                    }}
+                  >
+                    <Plus size={16} /> Add step
+                  </button>
+                </div>
+
+                <button type="submit"
+                  style={{
+                    width: '100%', padding: '14px', borderRadius: '12px', border: 'none',
+                    background: colors.accent, color: '#FFF',
+                    fontSize: '16px', fontWeight: '600', cursor: 'pointer'
+                  }}
+                >
+                  Save Routine
+                </button>
+              </form>
+            </div>
+          </div>
+        );
+      };
+
+      const AddAppointmentModal = () => (
+        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <form ref={appointmentFormRef} onSubmit={handleAddAppointment}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <h2 style={{ fontSize: '20px', fontWeight: '600', color: colors.text, margin: 0 }}>Add Appointment</h2>
+                <button type="button" onClick={() => setShowModal(false)} style={{ border: 'none', background: 'none', cursor: 'pointer' }}>
+                  <X size={24} color={colors.textLight} />
+                </button>
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ fontSize: '14px', color: colors.text, display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                  Title
+                </label>
+                <input type="text" name="title" placeholder="e.g., Doctor appointment" required
+                  style={{
+                    width: '100%', padding: '12px', borderRadius: '10px',
+                    border: `1px solid ${colors.bg}`, fontSize: '15px'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: '14px', color: colors.text, display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                    Date
+                  </label>
+                  <input type="date" name="date" required
+                    style={{
+                      width: '100%', padding: '12px', borderRadius: '10px',
+                      border: `1px solid ${colors.bg}`, fontSize: '15px'
+                    }}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: '14px', color: colors.text, display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                    Time
+                  </label>
+                  <input type="time" name="time" required
+                    style={{
+                      width: '100%', padding: '12px', borderRadius: '10px',
+                      border: `1px solid ${colors.bg}`, fontSize: '15px'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ fontSize: '14px', color: colors.text, display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                  How flexible is this?
+                </label>
+                <select name="flexibility" defaultValue="fixed"
+                  style={{
+                    width: '100%', padding: '12px', borderRadius: '10px',
+                    border: `1px solid ${colors.bg}`, fontSize: '15px'
+                  }}
+                >
+                  <option value="fixed">Fixed - Must do at this time</option>
+                  <option value="somewhat-flexible">Somewhat flexible - Can move if needed</option>
+                  <option value="flexible">Flexible - Easy to reschedule</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: '14px', color: colors.text, display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                    Transition before (min)
+                  </label>
+                  <input type="number" name="transitionBefore" defaultValue="15"
+                    style={{
+                      width: '100%', padding: '12px', borderRadius: '10px',
+                      border: `1px solid ${colors.bg}`, fontSize: '15px'
+                    }}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: '14px', color: colors.text, display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                    Transition after (min)
+                  </label>
+                  <input type="number" name="transitionAfter" defaultValue="30"
+                    style={{
+                      width: '100%', padding: '12px', borderRadius: '10px',
+                      border: `1px solid ${colors.bg}`, fontSize: '15px'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <button type="submit"
+                style={{
+                  width: '100%', padding: '14px', borderRadius: '12px', border: 'none',
+                  background: colors.accent, color: '#FFF',
+                  fontSize: '16px', fontWeight: '600', cursor: 'pointer'
+                }}
+              >
+                Save Appointment
+              </button>
+            </form>
+          </div>
+        </div>
+      );
+
+      const AddObjectiveModal = () => {
+        const [selectedColor, setSelectedColor] = useState(colors.accent);
+
+        return (
+          <div className="modal-overlay" onClick={() => setShowModal(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <form ref={objectiveFormRef} onSubmit={handleAddObjective}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <h2 style={{ fontSize: '20px', fontWeight: '600', color: colors.text, margin: 0 }}>Create Objective</h2>
+                  <button type="button" onClick={() => setShowModal(false)} style={{ border: 'none', background: 'none', cursor: 'pointer' }}>
+                    <X size={24} color={colors.textLight} />
+                  </button>
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ fontSize: '14px', color: colors.text, display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                    Objective name
+                  </label>
+                  <input type="text" name="name" placeholder="e.g., Calm Living Space" required
+                    style={{
+                      width: '100%', padding: '12px', borderRadius: '10px',
+                      border: `1px solid ${colors.bg}`, fontSize: '15px'
+                    }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ fontSize: '14px', color: colors.text, display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                    Why is this important to you?
+                  </label>
+                  <textarea name="why" placeholder="e.g., Peace and reduced sensory overwhelm" required
+                    style={{
+                      width: '100%', padding: '12px', borderRadius: '10px',
+                      border: `1px solid ${colors.bg}`, fontSize: '15px',
+                      minHeight: '80px', resize: 'vertical'
+                    }}
+                  />
+                </div>
+
+                <input type="hidden" name="color" value={selectedColor} />
+
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ fontSize: '14px', color: colors.text, display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                    Color theme
+                  </label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    {[colors.accent, colors.primary, colors.secondary, colors.energy.high, colors.cycle.follicular].map(color => (
+                      <button type="button" key={color}
+                        onClick={() => setSelectedColor(color)}
+                        style={{
+                          width: '40px', height: '40px', borderRadius: '50%',
+                          border: selectedColor === color ? '3px solid #333' : 'none',
+                          background: color, cursor: 'pointer',
+                          transition: 'transform 0.2s ease',
+                          transform: selectedColor === color ? 'scale(1.1)' : 'scale(1)'
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <button type="submit"
+                  style={{
+                    width: '100%', padding: '14px', borderRadius: '12px', border: 'none',
+                    background: colors.accent, color: '#FFF',
+                    fontSize: '16px', fontWeight: '600', cursor: 'pointer'
+                  }}
+                >
+                  Save Objective
+                </button>
+              </form>
+            </div>
+          </div>
+        );
+      };
+
+      const AddListModal = () => {
+        const [itemCount, setItemCount] = useState(3);
+        const [itemTypes, setItemTypes] = useState(['text', 'text', 'text']);
+
+        const handleItemTypeChange = (idx, type) => {
+          const newTypes = [...itemTypes];
+          newTypes[idx] = type;
+          setItemTypes(newTypes);
+        };
+
+        return (
+          <div className="modal-overlay" onClick={() => setShowModal(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <form ref={listFormRef} onSubmit={handleAddList}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <h2 style={{ fontSize: '20px', fontWeight: '600', color: colors.text, margin: 0 }}>Create List</h2>
+                  <button type="button" onClick={() => setShowModal(false)} style={{ border: 'none', background: 'none', cursor: 'pointer' }}>
+                    <X size={24} color={colors.textLight} />
+                  </button>
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ fontSize: '14px', color: colors.text, display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                    List name
+                  </label>
+                  <input type="text" name="listName" placeholder="e.g., Songs I'm Into" required
+                    style={{
+                      width: '100%', padding: '12px', borderRadius: '10px',
+                      border: `1px solid ${colors.bg}`, fontSize: '15px'
+                    }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ fontSize: '14px', color: colors.text, display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                    Notes (optional)
+                  </label>
+                  <textarea name="listNotes" placeholder="Add any notes, thoughts, or context about this list..."
+                    style={{
+                      width: '100%', padding: '12px', borderRadius: '10px',
+                      border: `1px solid ${colors.bg}`, fontSize: '15px',
+                      minHeight: '80px', resize: 'vertical'
+                    }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ fontSize: '14px', color: colors.text, display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                    Items
+                  </label>
+                  {[...Array(itemCount)].map((_, idx) => (
+                    <div key={idx} style={{ marginBottom: '12px', background: colors.bg, padding: '12px', borderRadius: '10px' }}>
+                      <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                        <select 
+                          value={itemTypes[idx]}
+                          onChange={(e) => handleItemTypeChange(idx, e.target.value)}
+                          style={{
+                            padding: '8px', borderRadius: '8px',
+                            border: `1px solid ${colors.bg}`, fontSize: '13px', background: 'white'
+                          }}
+                        >
+                          <option value="text">📝 Text</option>
+                          <option value="link">🔗 Link</option>
+                          <option value="image">🖼️ Image</option>
+                        </select>
+                      </div>
+                      
+                      <input type="hidden" name={`itemType${idx}`} value={itemTypes[idx]} />
+                      
+                      {itemTypes[idx] === 'text' && (
+                        <input name={`item${idx}`} placeholder="Item text"
+                          style={{
+                            width: '100%', padding: '10px', borderRadius: '10px',
+                            border: `1px solid ${colors.bg}`, fontSize: '14px'
+                          }}
+                        />
+                      )}
+                      
+                      {itemTypes[idx] === 'link' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <input name={`item${idx}`} placeholder="Link title"
+                            style={{
+                              width: '100%', padding: '10px', borderRadius: '10px',
+                              border: `1px solid ${colors.bg}`, fontSize: '14px'
+                            }}
+                          />
+                          <input name={`itemUrl${idx}`} type="url" placeholder="https://example.com"
+                            style={{
+                              width: '100%', padding: '10px', borderRadius: '10px',
+                              border: `1px solid ${colors.bg}`, fontSize: '14px'
+                            }}
+                          />
+                        </div>
+                      )}
+                      
+                      {itemTypes[idx] === 'image' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <input name={`item${idx}`} placeholder="Image caption (optional)"
+                            style={{
+                              width: '100%', padding: '10px', borderRadius: '10px',
+                              border: `1px solid ${colors.bg}`, fontSize: '14px'
+                            }}
+                          />
+                          <input name={`itemUrl${idx}`} type="url" placeholder="Image URL (https://...)"
+                            style={{
+                              width: '100%', padding: '10px', borderRadius: '10px',
+                              border: `1px solid ${colors.bg}`, fontSize: '14px'
+                            }}
+                          />
+                          <div style={{ fontSize: '12px', color: colors.textLight, fontStyle: 'italic' }}>
+                            Tip: Upload to Imgur, then paste the direct image link
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  <button type="button"
+                    onClick={() => {
+                      setItemCount(itemCount + 1);
+                      setItemTypes([...itemTypes, 'text']);
+                    }}
+                    style={{
+                      padding: '10px 16px', borderRadius: '10px', border: 'none',
+                      background: colors.bg, color: colors.text, cursor: 'pointer',
+                      fontSize: '14px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px'
+                    }}
+                  >
+                    <Plus size={16} /> Add item
+                  </button>
+                </div>
+
+                <button type="submit"
+                  style={{
+                    width: '100%', padding: '14px', borderRadius: '12px', border: 'none',
+                    background: colors.accent, color: '#FFF',
+                    fontSize: '16px', fontWeight: '600', cursor: 'pointer'
+                  }}
+                >
+                  Save List
+                </button>
+              </form>
+            </div>
+          </div>
+        );
+      };
+
+      const CycleUpdateModal = () => {
+        const [cycleDay, setCycleDay] = useState(dailyData.cycleDay);
+        const [energy, setEnergy] = useState(null);
+        const [sensory, setSensory] = useState(null);
+
+        return (
+          <div className="modal-overlay" onClick={() => setShowModal(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <form ref={cycleFormRef} onSubmit={handleCycleUpdate}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <h2 style={{ fontSize: '20px', fontWeight: '600', color: colors.text, margin: 0 }}>Update Cycle</h2>
+                  <button type="button" onClick={() => setShowModal(false)} style={{ border: 'none', background: 'none', cursor: 'pointer' }}>
+                    <X size={24} color={colors.textLight} />
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: '14px', color: colors.text, display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                      Cycle day
+                    </label>
+                    <input type="number" name="day" min="1" max="40" 
+                      value={cycleDay}
+                      onChange={(e) => setCycleDay(parseInt(e.target.value) || 1)}
+                      style={{
+                        width: '100%', padding: '12px', borderRadius: '10px',
+                        border: `1px solid ${colors.bg}`, fontSize: '15px'
+                      }}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: '14px', color: colors.text, display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                      Phase (auto-filled)
+                    </label>
+                    <select name="phase" value={getCyclePhase(cycleDay)}
+                      style={{
+                        width: '100%', padding: '12px', borderRadius: '10px',
+                        border: `1px solid ${colors.bg}`, fontSize: '15px'
+                      }}
+                    >
+                      <option value="menstrual">Menstrual</option>
+                      <option value="follicular">Follicular</option>
+                      <option value="ovulation">Ovulation</option>
+                      <option value="luteal">Luteal</option>
+                    </select>
+                  </div>
+                </div>
+
+                <input type="hidden" name="energy" value={energy || ''} />
+                <RatingSlider
+                  label="Energy today"
+                  emoji="⚡"
+                  value={energy}
+                  onChange={setEnergy}
+                />
+
+                <input type="hidden" name="sensory" value={sensory || ''} />
+                <RatingSlider
+                  label="Sensory experience"
+                  emoji="🎭"
+                  value={sensory}
+                  onChange={setSensory}
+                />
+
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{
+                    display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer',
+                    padding: '12px', borderRadius: '10px', background: colors.bg
+                  }}>
+                    <input type="checkbox" name="sexualActivity"
+                      style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                    />
+                    <span style={{ fontSize: '15px', color: colors.text, fontWeight: '500' }}>
+                      Sexual activity today
+                    </span>
+                  </label>
+                </div>
+
+                <button type="submit"
+                  style={{
+                    width: '100%', padding: '14px', borderRadius: '12px', border: 'none',
+                    background: colors.accent, color: '#FFF',
+                    fontSize: '16px', fontWeight: '600', cursor: 'pointer'
+                  }}
+                >
+                  Save Cycle Update
+                </button>
+              </form>
+            </div>
+          </div>
+        );
+      };
+
+      // HOME VIEW
+      const HomeView = () => {
+        const suggestedTasks = todos.filter(t => 
+          !t.completed && 
+          (dailyData.energy === null || 
+           (dailyData.energy <= 2 && t.energy === 'low') ||
+           (dailyData.energy === 3 && t.energy === 'mid') ||
+           (dailyData.energy >= 4 && t.energy === 'high'))
+        ).slice(0, 3);
+
+        return (
+          <div style={{ padding: '20px' }}>
+            <div style={{ marginBottom: '30px' }}>
+              <h1 style={{ fontSize: '32px', fontWeight: '700', color: colors.text, margin: '0 0 8px 0', fontFamily: 'Georgia, serif' }}>
+                Your Dashboard
+              </h1>
+              <p style={{ color: colors.textLight, fontSize: '15px', margin: 0 }}>
+                {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              </p>
+            </div>
+
+            {/* Daily Check-in Card */}
+            <div style={{ background: colors.card, borderRadius: '20px', padding: '24px', marginBottom: '20px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: '600', color: colors.text, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Sparkles size={20} color={colors.primary} />
+                Daily Check-in
+              </h2>
+              
+              <RatingSlider label="Energy Level" emoji="⚡" value={dailyData.energy}
+                onChange={(val) => setDailyData(prev => ({...prev, energy: val}))} />
+              <RatingSlider label="Sleep Quality" emoji="🌙" value={dailyData.sleep}
+                onChange={(val) => setDailyData(prev => ({...prev, sleep: val}))} />
+              <RatingSlider label="Sensory Difficulty" emoji="🎭" value={dailyData.sensory}
+                onChange={(val) => setDailyData(prev => ({...prev, sensory: val}))} />
+              <RatingSlider label="Emotional State" emoji="💛" value={dailyData.emotions}
+                onChange={(val) => setDailyData(prev => ({...prev, emotions: val}))} />
+
+              <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: `1px solid ${colors.bg}` }}>
+                <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: '14px', color: colors.textLight, display: 'block', marginBottom: '8px' }}>☕ Caffeine servings</label>
+                    <input type="number" value={dailyData.caffeine}
+                      onChange={(e) => setDailyData(prev => ({...prev, caffeine: parseInt(e.target.value) || 0}))}
+                      style={{ width: '100%', padding: '10px', borderRadius: '10px', border: `1px solid ${colors.bg}`, fontSize: '16px' }}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: '14px', color: colors.textLight, display: 'block', marginBottom: '8px' }}>🥬 Veggie servings</label>
+                    <input type="number" value={dailyData.veggies}
+                      onChange={(e) => setDailyData(prev => ({...prev, veggies: parseInt(e.target.value) || 0}))}
+                      style={{ width: '100%', padding: '10px', borderRadius: '10px', border: `1px solid ${colors.bg}`, fontSize: '16px' }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Medication Card */}
+            <div style={{ background: colors.card, borderRadius: '20px', padding: '24px', marginBottom: '20px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: '600', color: colors.text, marginBottom: '16px' }}>💊 Medication</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                <button
+                  onClick={() => setDailyData(prev => ({...prev, medication: {...prev.medication, taken: !prev.medication.taken}}))}
+                  style={{
+                    padding: '12px 20px', borderRadius: '12px', border: 'none',
+                    background: dailyData.medication.taken ? colors.accent : colors.bg,
+                    color: dailyData.medication.taken ? '#FFF' : colors.text,
+                    cursor: 'pointer', fontWeight: '600', fontSize: '14px', transition: 'all 0.2s ease'
+                  }}
+                >
+                  {dailyData.medication.taken ? '✓ Logged' : 'Log meds'}
+                </button>
+                {!dailyData.medication.taken && (
+                  <span style={{ fontSize: '13px', color: colors.textLight }}>Haven't logged today yet</span>
+                )}
+              </div>
+              {dailyData.medication.taken && (
+                <div style={{ marginTop: '12px' }}>
+                  <input type="time" defaultValue={dailyData.medication.time || ''}
+                    onBlur={(e) => setDailyData(prev => ({...prev, medication: {...prev.medication, time: e.target.value}}))}
+                    placeholder="Time"
+                    style={{ width: '100%', padding: '10px', borderRadius: '10px', border: `1px solid ${colors.bg}`, marginBottom: '8px', fontSize: '14px' }}
+                  />
+                  <input type="text" defaultValue={dailyData.medication.dose || ''}
+                    onBlur={(e) => setDailyData(prev => ({...prev, medication: {...prev.medication, dose: e.target.value}}))}
+                    placeholder="Dose (e.g., 20mg)"
+                    style={{ width: '100%', padding: '10px', borderRadius: '10px', border: `1px solid ${colors.bg}`, marginBottom: '8px', fontSize: '14px' }}
+                  />
+                  <textarea defaultValue={dailyData.medication.notes || ''}
+                    onBlur={(e) => setDailyData(prev => ({...prev, medication: {...prev.medication, notes: e.target.value}}))}
+                    placeholder="Notes about effects (optional)"
+                    style={{ width: '100%', padding: '10px', borderRadius: '10px', border: `1px solid ${colors.bg}`, fontSize: '14px', minHeight: '60px', resize: 'vertical' }}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Cycle Info */}
+            <div style={{ background: colors.card, borderRadius: '20px', padding: '24px', marginBottom: '20px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: '600', color: colors.text, margin: 0 }}>🌸 Cycle Day {dailyData.cycleDay}</h3>
+                <button
+                  onClick={() => { setModalType('cycle'); setShowModal(true); }}
+                  style={{ padding: '6px 12px', borderRadius: '8px', border: 'none', background: colors.primary, color: '#FFF', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+                >
+                  Update
+                </button>
+              </div>
+              <div style={{ background: colors.cycle[dailyData.cyclePhase], padding: '12px 16px', borderRadius: '12px', color: '#FFF', fontWeight: '500', fontSize: '14px' }}>
+                {dailyData.cyclePhase.charAt(0).toUpperCase() + dailyData.cyclePhase.slice(1)} Phase
+              </div>
+            </div>
+
+            {/* Suggested Tasks */}
+            {suggestedTasks.length > 0 && (
+              <div style={{ background: colors.card, borderRadius: '20px', padding: '24px', marginBottom: '20px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: '600', color: colors.text, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Target size={18} color={colors.primary} />
+                  Suggested for your energy
+                </h3>
+                {suggestedTasks.map(task => (
+                  <div key={task.id} style={{ padding: '12px', background: colors.bg, borderRadius: '12px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: colors.energy[task.energy] }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '14px', color: colors.text, fontWeight: '500' }}>{task.text}</div>
+                      <div style={{ fontSize: '12px', color: colors.textLight, marginTop: '2px' }}>{task.timeMinutes} min · {task.energy} energy</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Monthly Tracking Calendar */}
+            <div style={{ background: colors.card, borderRadius: '20px', padding: '24px', marginBottom: '20px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: '600', color: colors.text, marginBottom: '16px' }}>
+                📅 This Month at a Glance
+              </h3>
+              
+              {(() => {
+                const today = new Date();
+                const year = today.getFullYear();
+                const month = today.getMonth();
+                const firstDay = new Date(year, month, 1);
+                const lastDay = new Date(year, month + 1, 0);
+                const daysInMonth = lastDay.getDate();
+                const startingDayOfWeek = firstDay.getDay();
+                
+                // Get all tracking data from localStorage - create a map of date -> data
+                const trackingMap = {};
+                const dailyDataKey = 'dailyData';
+                const cycleHistoryKey = 'cycleHistory';
+                
+                // Add current daily data
+                if (dailyData.date) {
+                  trackingMap[dailyData.date] = {
+                    energy: dailyData.energy,
+                    medication: dailyData.medication.taken,
+                    tasks: todos.filter(t => t.completed).length
+                  };
+                }
+                
+                // Add cycle history
+                cycleHistory.forEach(entry => {
+                  if (!trackingMap[entry.date]) trackingMap[entry.date] = {};
+                  trackingMap[entry.date].cycle = true;
+                });
+                
+                // Create calendar grid
+                const calendarDays = [];
+                
+                // Add empty cells for days before month starts
+                for (let i = 0; i < startingDayOfWeek; i++) {
+                  calendarDays.push(null);
+                }
+                
+                // Add actual days
+                for (let day = 1; day <= daysInMonth; day++) {
+                  const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                  const isToday = dateStr === dailyData.date;
+                  const tracking = trackingMap[dateStr] || {};
+                  
+                  calendarDays.push({
+                    day,
+                    dateStr,
+                    isToday,
+                    tracking
+                  });
+                }
+                
+                return (
+                  <>
+                    {/* Day names header */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', marginBottom: '8px' }}>
+                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                        <div key={day} style={{ textAlign: 'center', fontSize: '11px', fontWeight: '600', color: colors.textLight, padding: '4px' }}>
+                          {day}
+                        </div>
+                      ))}
+                    </div>
+                    
+                    {/* Calendar grid */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px' }}>
+                      {calendarDays.map((dayObj, idx) => {
+                        if (!dayObj) {
+                          return <div key={`empty-${idx}`} style={{ aspectRatio: '1' }} />;
+                        }
+                        
+                        const { day, isToday, tracking } = dayObj;
+                        const hasData = tracking.energy || tracking.medication || tracking.cycle || tracking.tasks;
+                        
+                        return (
+                          <div key={day} style={{
+                            aspectRatio: '1',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderRadius: '12px',
+                            background: isToday ? colors.primary : hasData ? colors.bg : 'transparent',
+                            border: isToday ? `2px solid ${colors.primary}` : hasData ? `1px solid ${colors.bg}` : `1px solid ${colors.bg}`,
+                            position: 'relative',
+                            padding: '4px'
+                          }}>
+                            <div style={{
+                              fontSize: '13px',
+                              fontWeight: isToday ? '700' : '500',
+                              color: isToday ? '#FFF' : colors.text,
+                              marginBottom: '2px'
+                            }}>
+                              {day}
+                            </div>
+                            
+                            {/* Tracking icons */}
+                            {hasData && (
+                              <div style={{ display: 'flex', gap: '2px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                                {tracking.energy && (
+                                  <div style={{ fontSize: '8px' }} title="Energy tracked">⚡</div>
+                                )}
+                                {tracking.medication && (
+                                  <div style={{ fontSize: '8px' }} title="Medication logged">💊</div>
+                                )}
+                                {tracking.cycle && (
+                                  <div style={{ fontSize: '8px' }} title="Cycle updated">🌸</div>
+                                )}
+                                {tracking.tasks > 0 && (
+                                  <div style={{ fontSize: '8px' }} title={`${tracking.tasks} tasks done`}>✓</div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    
+                    {/* Legend */}
+                    <div style={{ marginTop: '16px', padding: '12px', background: colors.bg, borderRadius: '10px', fontSize: '12px', color: colors.textLight }}>
+                      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                        <span>⚡ Energy tracked</span>
+                        <span>💊 Meds logged</span>
+                        <span>🌸 Cycle updated</span>
+                        <span>✓ Tasks done</span>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* Today's Appointments */}
+            {appointments.filter(apt => apt.date === dailyData.date).length > 0 && (
+              <div style={{ background: colors.card, borderRadius: '20px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: '600', color: colors.text, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Calendar size={18} color={colors.primary} />
+                  Today's Schedule
+                </h3>
+                {appointments.filter(apt => apt.date === dailyData.date).map(apt => (
+                  <div key={apt.id} style={{ padding: '14px', background: colors.bg, borderRadius: '12px', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '6px' }}>
+                      <div style={{ fontSize: '15px', fontWeight: '600', color: colors.text }}>{apt.title}</div>
+                      <div style={{
+                        fontSize: '11px', padding: '4px 10px', borderRadius: '8px',
+                        background: apt.flexibility === 'fixed' ? colors.secondary : apt.flexibility === 'somewhat-flexible' ? colors.accent : colors.primary,
+                        color: '#FFF', fontWeight: '600'
+                      }}>
+                        {apt.flexibility === 'fixed' ? 'MUST DO' : apt.flexibility === 'somewhat-flexible' ? 'MOVEABLE' : 'FLEXIBLE'}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: '13px', color: colors.textLight }}>
+                      {apt.time} · {apt.transitionBefore}min before, {apt.transitionAfter}min after
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      };
+
+      // PLANNING VIEW
+      const PlanningView = () => (
+        <div style={{ padding: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+            <h1 style={{ fontSize: '28px', fontWeight: '700', color: colors.text, margin: 0, fontFamily: 'Georgia, serif' }}>
+              Planning & To-Dos
+            </h1>
+            <button onClick={() => { setModalType('task'); setShowModal(true); }}
+              style={{ padding: '10px 16px', borderRadius: '12px', border: 'none', background: colors.primary, color: '#FFF', cursor: 'pointer', fontSize: '14px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Plus size={18} /> Add Task
+            </button>
+          </div>
+
+          {/* Objectives */}
+          <div style={{ marginBottom: '32px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: '600', color: colors.text, margin: 0 }}>Your Objectives</h2>
+              <button onClick={() => { setModalType('objective'); setShowModal(true); }}
+                style={{ padding: '8px 14px', borderRadius: '10px', border: 'none', background: colors.accent, color: '#FFF', cursor: 'pointer', fontSize: '13px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Plus size={16} /> Add
+              </button>
+            </div>
+            {objectives.map(obj => (
+              <div key={obj.id} style={{ background: colors.card, borderRadius: '16px', padding: '20px', marginBottom: '12px', boxShadow: '0 4px 16px rgba(0,0,0,0.08)', borderLeft: `4px solid ${obj.color}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '6px' }}>
+                  <div style={{ fontSize: '16px', fontWeight: '600', color: colors.text }}>{obj.name}</div>
+                  <button onClick={() => handleDeleteObjective(obj.id)}
+                    style={{ padding: '6px', borderRadius: '8px', border: 'none', background: 'transparent', cursor: 'pointer' }}
+                  >
+                    <X size={16} color={colors.textLight} />
+                  </button>
+                </div>
+                <div style={{ fontSize: '13px', color: colors.textLight, fontStyle: 'italic' }}>Why: {obj.why}</div>
+                <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: `1px solid ${colors.bg}` }}>
+                  <div style={{ fontSize: '12px', color: colors.textLight, marginBottom: '8px' }}>Related tasks:</div>
+                  {todos.filter(t => t.objectiveId === obj.id).map(task => (
+                    <div key={task.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', padding: '8px', background: task.completed ? colors.bg : 'transparent', borderRadius: '8px' }}>
+                      <button
+                        onClick={() => setTodos(todos.map(t => t.id === task.id ? {...t, completed: !t.completed} : t))}
+                        style={{
+                          width: '20px', height: '20px', borderRadius: '50%', border: `2px solid ${colors.accent}`,
+                          background: task.completed ? colors.accent : 'transparent',
+                          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFF', fontSize: '12px'
+                        }}
+                      >
+                        {task.completed && '✓'}
+                      </button>
+                      <span style={{ fontSize: '14px', color: task.completed ? colors.textLight : colors.text, textDecoration: task.completed ? 'line-through' : 'none', flex: 1 }}>
+                        {task.text}
+                      </span>
+                      <div style={{ fontSize: '11px', padding: '4px 8px', borderRadius: '6px', background: colors.energy[task.energy], color: '#FFF', fontWeight: '600' }}>
+                        {task.energy}
+                      </div>
+                      <button onClick={() => handleDeleteTask(task.id)}
+                        style={{ padding: '4px', borderRadius: '6px', border: 'none', background: 'transparent', cursor: 'pointer' }}
+                      >
+                        <X size={14} color={colors.textLight} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+
+      // ROUTINES VIEW
+      const RoutinesView = () => (
+        <div style={{ padding: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+            <h1 style={{ fontSize: '28px', fontWeight: '700', color: colors.text, margin: 0, fontFamily: 'Georgia, serif' }}>Routines</h1>
+            <button onClick={() => { setModalType('routine'); setShowModal(true); }}
+              style={{ padding: '10px 16px', borderRadius: '12px', border: 'none', background: colors.primary, color: '#FFF', cursor: 'pointer', fontSize: '14px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Plus size={18} /> Create Routine
+            </button>
+          </div>
+
+          {['high', 'mid', 'low'].map(energyLevel => {
+            const routinesForLevel = routines.filter(r => r.energyLevel === energyLevel);
+            if (routinesForLevel.length === 0) return null;
+
+            return (
+              <div key={energyLevel} style={{ marginBottom: '24px' }}>
+                <h2 style={{ fontSize: '16px', fontWeight: '600', color: colors.text, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: colors.energy[energyLevel] }} />
+                  {energyLevel.charAt(0).toUpperCase() + energyLevel.slice(1)} Energy Routines
+                </h2>
+                
+                {routinesForLevel.map(routine => (
+                  <div key={routine.id} style={{ background: colors.card, borderRadius: '16px', padding: '20px', marginBottom: '12px', boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                      <h3 style={{ fontSize: '18px', fontWeight: '600', color: colors.text }}>{routine.name}</h3>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          onClick={() => setRoutines(routines.map(r => r.id === routine.id ? {...r, completed: !r.completed} : r))}
+                          style={{ padding: '8px 16px', borderRadius: '10px', border: 'none', background: routine.completed ? colors.accent : colors.bg, color: routine.completed ? '#FFF' : colors.text, fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}
+                        >
+                          {routine.completed ? '✓ Done' : 'Start'}
+                        </button>
+                        <button onClick={() => handleDeleteRoutine(routine.id)}
+                          style={{ padding: '8px', borderRadius: '10px', border: 'none', background: colors.bg, cursor: 'pointer' }}
+                        >
+                          <X size={16} color={colors.textLight} />
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {routine.steps.map((step, idx) => (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px', background: colors.bg, borderRadius: '10px' }}>
+                          <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: colors.energy[energyLevel], color: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '600' }}>
+                            {idx + 1}
+                          </div>
+                          <span style={{ fontSize: '14px', color: colors.text }}>{step}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      );
+
+      // CALENDAR VIEW
+      const CalendarView = () => (
+        <div style={{ padding: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+            <h1 style={{ fontSize: '28px', fontWeight: '700', color: colors.text, margin: 0, fontFamily: 'Georgia, serif' }}>Calendar</h1>
+            <button onClick={() => { setModalType('appointment'); setShowModal(true); }}
+              style={{ padding: '10px 16px', borderRadius: '12px', border: 'none', background: colors.primary, color: '#FFF', cursor: 'pointer', fontSize: '14px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Plus size={18} /> Add Event
+            </button>
+          </div>
+
+          {appointments.length === 0 ? (
+            <div style={{ background: colors.card, borderRadius: '16px', padding: '40px', textAlign: 'center', color: colors.textLight, boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
+              <Calendar size={48} color={colors.textLight} style={{ marginBottom: '16px' }} />
+              <p style={{ fontSize: '15px', margin: 0 }}>No appointments yet. Add your first one!</p>
+            </div>
+          ) : (
+            appointments.map(apt => (
+              <div key={apt.id} style={{ background: colors.card, borderRadius: '16px', padding: '20px', marginBottom: '16px', boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                      <div>
+                        <h3 style={{ fontSize: '18px', fontWeight: '600', color: colors.text, marginBottom: '6px' }}>{apt.title}</h3>
+                        <div style={{ fontSize: '14px', color: colors.textLight }}>
+                          {new Date(apt.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                        </div>
+                        <div style={{ fontSize: '16px', fontWeight: '600', color: colors.primary, marginTop: '4px' }}>{apt.time}</div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'start' }}>
+                        <div style={{
+                          padding: '6px 14px', borderRadius: '10px', fontSize: '12px', fontWeight: '600',
+                          background: apt.flexibility === 'fixed' ? colors.secondary : apt.flexibility === 'somewhat-flexible' ? colors.accent : colors.primary,
+                          color: '#FFF'
+                        }}>
+                          {apt.flexibility === 'fixed' ? 'MUST DO' : apt.flexibility === 'somewhat-flexible' ? 'MOVEABLE' : 'FLEXIBLE'}
+                        </div>
+                        <button onClick={() => handleDeleteAppointment(apt.id)}
+                          style={{ padding: '6px', borderRadius: '8px', border: 'none', background: colors.bg, cursor: 'pointer' }}
+                        >
+                          <X size={16} color={colors.textLight} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: `1px solid ${colors.bg}`, display: 'flex', gap: '20px' }}>
+                  <div>
+                    <div style={{ fontSize: '12px', color: colors.textLight, marginBottom: '4px' }}>Transition before</div>
+                    <div style={{ fontSize: '16px', fontWeight: '600', color: colors.text }}>{apt.transitionBefore} min</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '12px', color: colors.textLight, marginBottom: '4px' }}>Transition after</div>
+                    <div style={{ fontSize: '16px', fontWeight: '600', color: colors.text }}>{apt.transitionAfter} min</div>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      );
+
+      // CYCLE VIEW with visual calendar and data insights - continuing...
+      const CycleView = () => (
+        <div style={{ padding: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+            <h1 style={{ fontSize: '28px', fontWeight: '700', color: colors.text, margin: 0, fontFamily: 'Georgia, serif' }}>Cycle & Patterns</h1>
+            <button onClick={() => { setModalType('cycle'); setShowModal(true); }}
+              style={{ padding: '10px 16px', borderRadius: '12px', border: 'none', background: colors.primary, color: '#FFF', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}
+            >
+              Update Cycle
+            </button>
+          </div>
+
+          <div style={{ background: colors.card, borderRadius: '16px', padding: '24px', marginBottom: '20px', boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: '600', color: colors.text, marginBottom: '16px' }}>Current Cycle</h2>
+            <div style={{ background: colors.cycle[dailyData.cyclePhase], padding: '20px', borderRadius: '16px', marginBottom: '16px' }}>
+              <div style={{ color: '#FFF', fontSize: '32px', fontWeight: '700', marginBottom: '8px' }}>Day {dailyData.cycleDay}</div>
+              <div style={{ color: '#FFF', fontSize: '18px', fontWeight: '500' }}>
+                {dailyData.cyclePhase.charAt(0).toUpperCase() + dailyData.cyclePhase.slice(1)} Phase
+              </div>
+            </div>
+            
+            <div style={{ fontSize: '14px', color: colors.text, lineHeight: '1.6' }}>
+              <p style={{ marginBottom: '8px', fontWeight: '600' }}>What to expect:</p>
+              {dailyData.cyclePhase === 'menstrual' && <p>Lower energy, increased need for rest. Focus on gentle tasks and self-care.</p>}
+              {dailyData.cyclePhase === 'follicular' && <p>Rising energy and mood. Good time for challenging tasks and new projects.</p>}
+              {dailyData.cyclePhase === 'ovulation' && <p>Peak energy and social capacity. Great for important meetings and high-focus work.</p>}
+              {dailyData.cyclePhase === 'luteal' && <p>Gradually decreasing energy. Time to wrap up projects and plan for rest.</p>}
+            </div>
+          </div>
+
+          {/* Visual Cycle Calendar */}
+          <div style={{ background: colors.card, borderRadius: '16px', padding: '24px', marginBottom: '20px', boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: '600', color: colors.text, marginBottom: '16px' }}>28-Day Cycle Calendar</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px', marginBottom: '16px' }}>
+              {[...Array(28)].map((_, i) => {
+                const day = i + 1;
+                const phase = getCyclePhase(day);
+                const isToday = day === dailyData.cycleDay;
+                
+                return (
+                  <div key={day}
+                    style={{
+                      aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      borderRadius: '12px', background: isToday ? colors.cycle[phase] : colors.bg,
+                      color: isToday ? '#FFF' : colors.text, fontSize: '14px',
+                      fontWeight: isToday ? '700' : '500',
+                      border: isToday ? '3px solid ' + colors.cycle[phase] : 'none',
+                      position: 'relative', cursor: 'pointer', transition: 'all 0.2s ease'
+                    }}
+                    onClick={() => { setModalType('cycle'); setShowModal(true); }}
+                  >
+                    {day}
+                    {!isToday && (
+                      <div style={{
+                        position: 'absolute', bottom: '2px', left: '50%', transform: 'translateX(-50%)',
+                        width: '4px', height: '4px', borderRadius: '50%',
+                        background: colors.cycle[phase], opacity: 0.5
+                      }} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Legend */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', fontSize: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: colors.cycle.menstrual }} />
+                <span style={{ color: colors.textLight }}>Menstrual (1-5)</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: colors.cycle.follicular }} />
+                <span style={{ color: colors.textLight }}>Follicular (6-13)</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: colors.cycle.ovulation }} />
+                <span style={{ color: colors.textLight }}>Ovulation (14-16)</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: colors.cycle.luteal }} />
+                <span style={{ color: colors.textLight }}>Luteal (17-28)</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Pattern Insights */}
+          <div style={{ background: colors.card, borderRadius: '16px', padding: '24px', boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: '600', color: colors.text, marginBottom: '16px' }}>Pattern Insights & Trends</h2>
+            {cycleHistory.length === 0 ? (
+              <p style={{ fontSize: '14px', color: colors.textLight, lineHeight: '1.6' }}>
+                Track your cycle updates to spot patterns. Insights will appear as you build your data history.
+              </p>
+            ) : (
+              <div>
+                <p style={{ fontSize: '14px', color: colors.text, marginBottom: '16px', fontWeight: '500' }}>
+                  📊 {cycleHistory.length} cycle {cycleHistory.length === 1 ? 'entry' : 'entries'} tracked
+                </p>
+                {/* Simple insights */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {cycleHistory.filter(h => h.sexualActivity).length > 0 && (
+                    <div style={{ background: colors.bg, padding: '12px', borderRadius: '10px', fontSize: '14px', color: colors.text }}>
+                      <span style={{ fontWeight: '600' }}>💕 Sexual Activity:</span> {cycleHistory.filter(h => h.sexualActivity).length} days logged
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+
+      // LISTS VIEW
+      const ListsView = () => {
+        // Filter lists by selected month if in month view
+        const filteredLists = listViewMode === 'month' 
+          ? lists.filter(list => {
+              const listDate = list.createdDate || new Date(list.id).toISOString().split('T')[0];
+              return listDate.startsWith(selectedMonth);
+            })
+          : lists;
+
+        // Get months that have lists
+        const monthsWithLists = [...new Set(
+          lists.map(list => {
+            const date = list.createdDate || new Date(list.id).toISOString().split('T')[0];
+            return date.substring(0, 7); // YYYY-MM
+          })
+        )].sort().reverse();
+
+        return (
+          <div style={{ padding: '20px' }}>
+            <h1 style={{ fontSize: '28px', fontWeight: '700', color: colors.text, marginBottom: '24px', fontFamily: 'Georgia, serif' }}>
+              Lists & Brain Dumps
+            </h1>
+
+            {/* View Toggle */}
+            <div style={{ background: colors.card, borderRadius: '16px', padding: '20px', marginBottom: '20px', boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
+              <div style={{ display: 'flex', gap: '12px', marginBottom: listViewMode === 'month' ? '16px' : '0' }}>
+                <button
+                  onClick={() => setListViewMode('all')}
+                  style={{
+                    flex: 1, padding: '12px', borderRadius: '10px', border: 'none',
+                    background: listViewMode === 'all' ? colors.primary : colors.bg,
+                    color: listViewMode === 'all' ? '#FFF' : colors.text,
+                    fontWeight: '600', fontSize: '14px', cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  📋 All Lists
+                </button>
+                <button
+                  onClick={() => setListViewMode('month')}
+                  style={{
+                    flex: 1, padding: '12px', borderRadius: '10px', border: 'none',
+                    background: listViewMode === 'month' ? colors.primary : colors.bg,
+                    color: listViewMode === 'month' ? '#FFF' : colors.text,
+                    fontWeight: '600', fontSize: '14px', cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  📅 By Month
+                </button>
+              </div>
+
+              {/* Month Selector */}
+              {listViewMode === 'month' && (
+                <div>
+                  <label style={{ fontSize: '14px', color: colors.text, display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                    Select Month
+                  </label>
+                  <select
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                    style={{
+                      width: '100%', padding: '12px', borderRadius: '10px',
+                      border: `1px solid ${colors.bg}`, fontSize: '15px',
+                      background: 'white'
+                    }}
+                  >
+                    {monthsWithLists.map(month => {
+                      const date = new Date(month + '-01');
+                      const monthName = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+                      const count = lists.filter(l => {
+                        const listDate = l.createdDate || new Date(l.id).toISOString().split('T')[0];
+                        return listDate.startsWith(month);
+                      }).length;
+                      return (
+                        <option key={month} value={month}>
+                          {monthName} ({count} {count === 1 ? 'list' : 'lists'})
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {/* Lists Display */}
+            {filteredLists.length === 0 ? (
+              <div style={{ background: colors.card, borderRadius: '16px', padding: '40px', textAlign: 'center', marginBottom: '16px', boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
+                <Sparkles size={48} color={colors.textLight} style={{ marginBottom: '16px' }} />
+                <p style={{ fontSize: '15px', color: colors.textLight, margin: 0 }}>
+                  {listViewMode === 'month' 
+                    ? `No lists created in ${new Date(selectedMonth + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`
+                    : 'No lists yet. Create your first one!'}
+                </p>
+              </div>
+            ) : (
+              filteredLists.map(list => (
+                <div key={list.id} style={{ background: colors.card, borderRadius: '16px', padding: '24px', marginBottom: '16px', boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <div style={{ flex: 1 }}>
+                      <h2 style={{ fontSize: '18px', fontWeight: '600', color: colors.text, margin: 0, display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                        <Sparkles size={18} color={colors.primary} />
+                        {list.name}
+                      </h2>
+                      {list.createdDate && (
+                        <div style={{ fontSize: '12px', color: colors.textLight }}>
+                          Created: {new Date(list.createdDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </div>
+                      )}
+                    </div>
+                    <button onClick={() => handleDeleteList(list.id)}
+                      style={{ padding: '6px', borderRadius: '8px', border: 'none', background: 'transparent', cursor: 'pointer' }}
+                    >
+                      <X size={16} color={colors.textLight} />
+                    </button>
+                  </div>
+
+                  {/* Notes Section */}
+                  {list.notes && (
+                    <div style={{ 
+                      background: colors.bg, 
+                      padding: '12px 16px', 
+                      borderRadius: '12px', 
+                      marginBottom: '16px',
+                      borderLeft: `3px solid ${colors.accent}`
+                    }}>
+                      <div style={{ fontSize: '12px', fontWeight: '600', color: colors.accent, marginBottom: '4px' }}>📝 Notes</div>
+                      <div style={{ fontSize: '14px', color: colors.text, lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
+                        {list.notes}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Items */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {list.items.map((item, idx) => {
+                      // Handle old format (string items)
+                      if (typeof item === 'string') {
+                        return (
+                          <div key={idx} style={{ padding: '12px 16px', background: colors.bg, borderRadius: '12px', fontSize: '14px', color: colors.text }}>
+                            {item}
+                          </div>
+                        );
+                      }
+                      
+                      // Handle new format (object items)
+                      if (item.type === 'text') {
+                        return (
+                          <div key={idx} style={{ padding: '12px 16px', background: colors.bg, borderRadius: '12px', fontSize: '14px', color: colors.text }}>
+                            {item.text}
+                          </div>
+                        );
+                      }
+                      
+                      if (item.type === 'link') {
+                        return (
+                          <a key={idx} href={item.url} target="_blank" rel="noopener noreferrer"
+                            style={{
+                              padding: '12px 16px', background: colors.bg, borderRadius: '12px',
+                              fontSize: '14px', color: colors.text, textDecoration: 'none',
+                              display: 'flex', alignItems: 'center', gap: '8px',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseOver={(e) => e.currentTarget.style.background = colors.primary}
+                            onMouseOut={(e) => e.currentTarget.style.background = colors.bg}
+                          >
+                            <span style={{ fontSize: '16px' }}>🔗</span>
+                            <span style={{ flex: 1 }}>{item.text}</span>
+                            <span style={{ fontSize: '12px', color: colors.textLight }}>↗</span>
+                          </a>
+                        );
+                      }
+                      
+                      if (item.type === 'image') {
+                        return (
+                          <div key={idx} style={{ background: colors.bg, borderRadius: '12px', padding: '12px', overflow: 'hidden' }}>
+                            {item.text && (
+                              <div style={{ fontSize: '14px', color: colors.text, marginBottom: '8px', fontWeight: '500' }}>
+                                {item.text}
+                              </div>
+                            )}
+                            <img 
+                              src={item.url} 
+                              alt={item.text || 'List image'}
+                              style={{
+                                width: '100%', borderRadius: '8px', maxHeight: '300px',
+                                objectFit: 'cover', cursor: 'pointer'
+                              }}
+                              onClick={() => window.open(item.url, '_blank')}
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                                e.target.nextSibling.style.display = 'block';
+                              }}
+                            />
+                            <div style={{ display: 'none', padding: '20px', textAlign: 'center', fontSize: '13px', color: colors.textLight }}>
+                              ⚠️ Image failed to load
+                              <br/>
+                              <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ color: colors.primary }}>
+                                Open link
+                              </a>
+                            </div>
+                          </div>
+                        );
+                      }
+                      
+                      return null;
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
+
+            <button onClick={() => { setModalType('list'); setShowModal(true); }}
+              style={{
+                width: '100%', background: colors.card, borderRadius: '16px', padding: '24px',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.08)', border: `2px dashed ${colors.bg}`,
+                cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px'
+              }}
+            >
+              <Plus size={24} color={colors.textLight} />
+              <div style={{ color: colors.textLight, fontSize: '14px', fontWeight: '500' }}>Add a new list or brain dump</div>
+            </button>
+          </div>
+        );
+      };
+
+      // Continue with other views...
+      return (
+        <div style={{
+          minHeight: '100vh', background: colors.bg,
+          paddingBottom: '80px'
+        }}>
+          {/* Content */}
+          {currentView === 'home' && <HomeView />}
+          {currentView === 'planning' && <PlanningView />}
+          {currentView === 'routines' && <RoutinesView />}
+          {currentView === 'calendar' && <CalendarView />}
+          {currentView === 'cycle' && <CycleView />}
+          {currentView === 'lists' && <ListsView />}
+
+          {/* Modals */}
+          {showModal && modalType === 'task' && <AddTaskModal />}
+          {showModal && modalType === 'routine' && <AddRoutineModal />}
+          {showModal && modalType === 'appointment' && <AddAppointmentModal />}
+          {showModal && modalType === 'objective' && <AddObjectiveModal />}
+          {showModal && modalType === 'list' && <AddListModal />}
+          {showModal && modalType === 'cycle' && <CycleUpdateModal />}
+
+          {/* Bottom Navigation */}
+          <div style={{
+            position: 'fixed', bottom: 0, left: 0, right: 0,
+            background: colors.card, borderTop: `1px solid ${colors.bg}`,
+            display: 'flex', padding: '8px 0',
+            boxShadow: '0 -4px 20px rgba(0,0,0,0.08)'
+          }}>
+            <button onClick={() => setCurrentView('home')}
+              style={{
+                flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                gap: '4px', padding: '8px 4px', border: 'none', background: 'transparent',
+                cursor: 'pointer', color: currentView === 'home' ? colors.primary : colors.textLight
+              }}
+            >
+              <Sparkles size={22} color={currentView === 'home' ? colors.primary : colors.textLight} />
+              <span style={{ fontSize: '11px', fontWeight: currentView === 'home' ? '600' : '500' }}>Home</span>
+            </button>
+            <button onClick={() => setCurrentView('planning')}
+              style={{
+                flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                gap: '4px', padding: '8px 4px', border: 'none', background: 'transparent',
+                cursor: 'pointer', color: currentView === 'planning' ? colors.primary : colors.textLight
+              }}
+            >
+              <Target size={22} color={currentView === 'planning' ? colors.primary : colors.textLight} />
+              <span style={{ fontSize: '11px', fontWeight: currentView === 'planning' ? '600' : '500' }}>Planning</span>
+            </button>
+            <button onClick={() => setCurrentView('routines')}
+              style={{
+                flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                gap: '4px', padding: '8px 4px', border: 'none', background: 'transparent',
+                cursor: 'pointer', color: currentView === 'routines' ? colors.primary : colors.textLight
+              }}
+            >
+              <Zap size={22} color={currentView === 'routines' ? colors.primary : colors.textLight} />
+              <span style={{ fontSize: '11px', fontWeight: currentView === 'routines' ? '600' : '500' }}>Routines</span>
+            </button>
+            <button onClick={() => setCurrentView('calendar')}
+              style={{
+                flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                gap: '4px', padding: '8px 4px', border: 'none', background: 'transparent',
+                cursor: 'pointer', color: currentView === 'calendar' ? colors.primary : colors.textLight
+              }}
+            >
+              <Calendar size={22} color={currentView === 'calendar' ? colors.primary : colors.textLight} />
+              <span style={{ fontSize: '11px', fontWeight: currentView === 'calendar' ? '600' : '500' }}>Calendar</span>
+            </button>
+            <button onClick={() => setCurrentView('cycle')}
+              style={{
+                flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                gap: '4px', padding: '8px 4px', border: 'none', background: 'transparent',
+                cursor: 'pointer', color: currentView === 'cycle' ? colors.primary : colors.textLight
+              }}
+            >
+              <Heart size={22} color={currentView === 'cycle' ? colors.primary : colors.textLight} />
+              <span style={{ fontSize: '11px', fontWeight: currentView === 'cycle' ? '600' : '500' }}>Cycle</span>
+            </button>
+            <button onClick={() => setCurrentView('lists')}
+              style={{
+                flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                gap: '4px', padding: '8px 4px', border: 'none', background: 'transparent',
+                cursor: 'pointer', color: currentView === 'lists' ? colors.primary : colors.textLight
+              }}
+            >
+              <Leaf size={22} color={currentView === 'lists' ? colors.primary : colors.textLight} />
+              <span style={{ fontSize: '11px', fontWeight: currentView === 'lists' ? '600' : '500' }}>Lists</span>
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<TiempoDashboard />);
+  </script>
+</body>
+</html>
